@@ -322,3 +322,22 @@ async fn horizon_changes_are_explicit_and_audited() {
     let events = audit_events(&dir);
     assert!(events.iter().any(|e| e["event"] == "session_state"));
 }
+
+#[tokio::test]
+async fn course_list_still_works_when_assignment_status_fails() {
+    let steps = vec![
+        ScriptStep {
+            text: None,
+            tool_calls: vec![canvas_agent::llm::scripted::ScriptToolCall {
+                name: "get_course_list".into(),
+                arguments: json!({}),
+            }],
+        },
+        final_step("You are enrolled in CS 101 and BIO 200 [S1]. Want their upcoming work?"),
+    ];
+    let (mut agent, _dir) = make_agent(&steps, Mock::failing_status());
+    let result = agent.run_turn("List my courses.").await.unwrap();
+    assert!(!result.text.contains("Canvas read failures"));
+    assert!(result.text.contains("Courses from Canvas"));
+    assert!(result.sources.iter().any(|source| source.id == "S1"));
+}

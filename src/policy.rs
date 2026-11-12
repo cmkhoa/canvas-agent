@@ -193,11 +193,14 @@ impl Policy {
                 0.0
             }
             Some(due) if due < now => {
-                let days = ((now - due).num_hours() as f64 / 24.0).ceil() as i64;
-                reasons.push(format!(
-                    "overdue by {days} day{}",
-                    if days == 1 { "" } else { "s" }
-                ));
+                let hours = (now - due).num_hours().max(1);
+                let days = ((hours as f64) / 24.0).ceil() as i64;
+                let reason = if hours < 24 {
+                    format!("overdue by {hours} hours")
+                } else {
+                    format!("overdue by {days} day{}", if days == 1 { "" } else { "s" })
+                };
+                reasons.push(reason);
                 self.file.score.overdue_base
                     + self.file.score.overdue_per_day
                         * (days.min(self.file.score.overdue_max_days) as f64)

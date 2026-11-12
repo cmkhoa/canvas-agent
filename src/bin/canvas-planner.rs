@@ -144,6 +144,13 @@ async fn run(cli: Cli) -> anyhow::Result<()> {
     };
     let config = AppConfig::load(overrides, true)?;
     let policy = Policy::load(&config.policy_path)?;
+    if config.horizon_days > policy.max_horizon_days() {
+        anyhow::bail!(
+            "default horizon {} days exceeds the policy maximum of {} days",
+            config.horizon_days,
+            policy.max_horizon_days()
+        );
+    }
     let clock: Arc<dyn Clock> = match config.now_override {
         Some(at) => Arc::new(FixedClock::new(at)),
         None => Arc::new(SystemClock),

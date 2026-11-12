@@ -31,6 +31,13 @@ pub struct Snapshot {
 }
 
 #[derive(Debug, Clone)]
+pub struct CourseSnapshot {
+    pub courses: Vec<Course>,
+    pub caveats: Vec<String>,
+    pub suspicious: Vec<String>,
+}
+
+#[derive(Debug, Clone)]
 pub struct RankedItem {
     pub assignment: Assignment,
     pub rank: usize,
@@ -125,30 +132,32 @@ impl Planner {
         self.tz
     }
 
-    /// Fetches the only Canvas data the planner uses. Submission status is required;
-    /// the course list and point values are optional and produce explicit caveats.
-    pub async fn snapshot(
-        &self,
-        mcp: &dyn CanvasMcp,
-        now: DateTime<Utc>,
-    ) -> Result<Snapshot, ToolError> {
+    /// Course names, IDs, terms, and Canvas roles. This intentionally does not require
+    /// assignment data, so a course-list question still works when deadlines fail.
+    pub async fn courses_only(&self, mcp: &dyn CanvasMcp) -> CourseSnapshot {
         let mut caveats = Vec::new();
         let mut suspicious = Vec::new();
-        let mut raw_text = String::new();
-
-        let courses = match mcp.call("list_courses", json!({})).await {
+        match mcp.call("list_courses", json!({})).await {
             Ok(text) => {
-                raw_text.push_str(&text);
+                suspicious = untrusted::scan(&text);
                 match parse_courses(&text) {
                     Ok(parsed) => {
                         caveats.extend(parsed.caveats);
-                        parsed.items
+                        CourseSnapshot {
+                            courses: parsed.items,
+                            caveats,
+                            suspicious,
+                        }
                     }
                     Err(error) => {
                         caveats.push(format!(
                             "Course list could not be parsed, so course IDs may be missing: {error}"
                         ));
-                        Vec::new()
+                        CourseSnapshot {
+                            courses: Vec::new(),
+                            caveats,
+                            suspicious,
+                        }
                     }
                 }
             }
@@ -156,9 +165,27 @@ impl Planner {
                 caveats.push(format!(
                     "Course list unavailable ({error}); citations may omit course IDs."
                 ));
-                Vec::new()
+                CourseSnapshot {
+                    courses: Vec::new(),
+                    caveats,
+                    suspicious,
+                }
             }
-        };
+        }
+    }
+
+    /// Fetches the only Canvas data the planner uses. Submission status is required;
+    /// the course list and point values are optional and produce explicit caveats.
+    pub async fn snapshot(
+        &self,
+        mcp: &dyn CanvasMcp,
+        now: DateTime<Utc>,
+    ) -> Result<Snapshot, ToolError> {
+        let courses_only = self.courses_only(mcp).await;
+        let mut caveats = courses_only.caveats;
+        let mut suspicious = courses_only.suspicious;
+        let mut raw_text = String::new();
+        let courses = courses_only.courses;
 
         let status_text = mcp
             .call("get_my_submission_status", json!({}))
@@ -376,12 +403,12 @@ impl Planner {
             if assignment.state.is_done() || assignment.state.needs_verification() {
                 continue;
             }
-            let Some(due) = assignment.due_at else {
+            if assignment.due_at.is_none() {
                 undated.push(assignment.clone());
                 continue;
-            };
+            }
             let tier = self.policy.risk_tier(assignment, now, horizon.end);
-            if !tier.is_reportable() || (due > horizon.end) {
+            if !tier.is_reportable() {
                 continue;
             }
             let score = self.policy.score(assignment, now);
@@ -489,11 +516,12 @@ impl Planner {
 
     pub fn course_list(
         &self,
-        snapshot: &Snapshot,
+        courses_in: &[Course],
+        caveats: &[String],
         registry: &mut CitationRegistry,
     ) -> CourseReport {
         let mut courses = Vec::new();
-        for course in &snapshot.courses {
+        for course in courses_in {
             let source_id = registry.cite_course(course);
             courses.push(CourseItem {
                 course: course.clone(),
@@ -502,14 +530,16 @@ impl Planner {
         }
         CourseReport {
             courses,
-            caveats: snapshot.caveats.clone(),
+            caveats: caveats.to_vec(),
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn assignment_detail(
         &self,
         mcp: &dyn CanvasMcp,
-        snapshot: &Snapshot,
+        courses: &[Course],
+        caveats: &[String],
         course_identifier: &str,
         assignment_id: u64,
         now: DateTime<Utc>,
@@ -532,7 +562,7 @@ impl Planner {
                 format!("Could not interpret Canvas assignment details: {error}"),
             )
         })?;
-        let course_id = course_id_for(&detail.course_label, &snapshot.courses);
+        let course_id = course_id_for(&detail.course_label, courses);
         let assignment = Assignment {
             course_label: detail.course_label.clone(),
             course_id,
@@ -555,7 +585,7 @@ impl Planner {
                 )
             });
         }
-        let caveats = snapshot.caveats.clone();
+        let caveats = caveats.to_vec();
         Ok(DetailReport {
             detail,
             assignment,
