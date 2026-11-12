@@ -4,6 +4,7 @@
 //! every other Canvas tool are rejected before any JSON-RPC call is made.
 
 pub mod parse;
+pub mod structured;
 
 use std::future::Future;
 use std::pin::Pin;
@@ -23,6 +24,9 @@ pub const ALLOWED_MCP_TOOLS: &[&str] = &[
     "get_my_submission_status",
     "get_my_upcoming_assignments",
     "get_assignment_details",
+    // Optional structured contract for agent consumption. The server may not expose it yet;
+    // the planner checks `supports_structured_snapshot()` and otherwise uses the four text tools.
+    "get_planning_snapshot",
 ];
 
 #[derive(Debug, Error)]
@@ -37,12 +41,40 @@ pub enum McpError {
     Protocol(String),
 }
 
+#[derive(Debug, Clone)]
+pub struct McpResponse {
+    pub text: String,
+    /// Present when the server returns MCP structured content (`structuredContent`).
+    pub structured: Option<Value>,
+}
+
+impl McpResponse {
+    pub fn text(text: impl Into<String>) -> Self {
+        Self {
+            text: text.into(),
+            structured: None,
+        }
+    }
+
+    pub fn with_structured(text: impl Into<String>, structured: Value) -> Self {
+        Self {
+            text: text.into(),
+            structured: Some(structured),
+        }
+    }
+}
+
 pub trait CanvasMcp: Send + Sync {
     fn call<'a>(
         &'a self,
         tool: &'a str,
         args: Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, McpError>> + Send + 'a>>;
+    ) -> Pin<Box<dyn Future<Output = Result<McpResponse, McpError>> + Send + 'a>>;
+
+    /// True when `get_planning_snapshot` is advertised by the server.
+    fn supports_structured_snapshot(&self) -> bool {
+        false
+    }
 }
 
 pub fn ensure_allowed(tool: &str) -> Result<(), McpError> {
@@ -56,6 +88,7 @@ pub fn ensure_allowed(tool: &str) -> Result<(), McpError> {
 pub struct LiveCanvasMcp {
     client: RunningService<RoleClient, ()>,
     command: String,
+    supports_structured_snapshot: bool,
 }
 
 impl LiveCanvasMcp {
@@ -67,9 +100,19 @@ impl LiveCanvasMcp {
         let client = ().serve(transport).await.map_err(|e| {
             McpError::Unavailable(format!("MCP handshake with {} failed: {e}", config.command))
         })?;
+        let supports_structured_snapshot = client
+            .list_all_tools()
+            .await
+            .map(|tools| {
+                tools
+                    .iter()
+                    .any(|tool| tool.name.as_ref() == "get_planning_snapshot")
+            })
+            .unwrap_or(false);
         Ok(Self {
             client,
             command: config.command.clone(),
+            supports_structured_snapshot,
         })
     }
 }
@@ -79,7 +122,7 @@ impl CanvasMcp for LiveCanvasMcp {
         &'a self,
         tool: &'a str,
         args: Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, McpError>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<McpResponse, McpError>> + Send + 'a>> {
         Box::pin(async move {
             ensure_allowed(tool)?;
             let arguments: Option<Map<String, Value>> = match args {
@@ -108,14 +151,19 @@ impl CanvasMcp for LiveCanvasMcp {
                 } else {
                     text
                 }))
-            } else if text.is_empty() {
-                Err(McpError::Protocol(format!(
-                    "{tool} returned no text content"
-                )))
+            } else if text.is_empty() && result.structured_content.is_none() {
+                Err(McpError::Protocol(format!("{tool} returned no content")))
             } else {
-                Ok(text)
+                Ok(McpResponse {
+                    text,
+                    structured: result.structured_content,
+                })
             }
         })
+    }
+
+    fn supports_structured_snapshot(&self) -> bool {
+        self.supports_structured_snapshot
     }
 }
 

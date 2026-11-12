@@ -28,6 +28,8 @@ pub struct Snapshot {
     pub caveats: Vec<String>,
     pub suspicious: Vec<String>,
     pub fetched_at: DateTime<Utc>,
+    /// `Some("1")` when the optional structured MCP contract was used.
+    pub structured_contract: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -138,7 +140,8 @@ impl Planner {
         let mut caveats = Vec::new();
         let mut suspicious = Vec::new();
         match mcp.call("list_courses", json!({})).await {
-            Ok(text) => {
+            Ok(response) => {
+                let text = response.text;
                 suspicious = untrusted::scan(&text);
                 match parse_courses(&text) {
                     Ok(parsed) => {
@@ -181,6 +184,9 @@ impl Planner {
         mcp: &dyn CanvasMcp,
         now: DateTime<Utc>,
     ) -> Result<Snapshot, ToolError> {
+        if mcp.supports_structured_snapshot() {
+            return self.snapshot_from_structured(mcp, now).await;
+        }
         let courses_only = self.courses_only(mcp).await;
         let mut caveats = courses_only.caveats;
         let mut suspicious = courses_only.suspicious;
@@ -190,7 +196,8 @@ impl Planner {
         let status_text = mcp
             .call("get_my_submission_status", json!({}))
             .await
-            .map_err(ToolError::from)?;
+            .map_err(ToolError::from)?
+            .text;
         raw_text.push_str(&status_text);
         let status = parse_submission_status(&status_text, self.tz, now).map_err(|error| {
             ToolError::new(
@@ -206,7 +213,8 @@ impl Planner {
             .await;
         let mut upcoming = ParseOutcome::<UpcomingRow>::default();
         match upcoming_text {
-            Ok(text) => {
+            Ok(response) => {
+                let text = response.text;
                 raw_text.push_str(&text);
                 match parse_upcoming(&text, self.tz, now) {
                     Ok(mut parsed) => {
@@ -291,6 +299,64 @@ impl Planner {
             caveats,
             suspicious,
             fetched_at: now,
+            structured_contract: None,
+        })
+    }
+
+    /// Preferred path: one typed JSON payload, no presentation-format parsing.
+    async fn snapshot_from_structured(
+        &self,
+        mcp: &dyn CanvasMcp,
+        now: DateTime<Utc>,
+    ) -> Result<Snapshot, ToolError> {
+        let response = mcp
+            .call(crate::mcp::structured::TOOL_NAME, json!({}))
+            .await
+            .map_err(ToolError::from)?;
+        let value = response.structured.ok_or_else(|| {
+            ToolError::new(
+                "canvas_contract_error",
+                "canvas-mcp advertised get_planning_snapshot but returned no structured content",
+            )
+        })?;
+        let parsed = crate::mcp::structured::parse_snapshot(&value).map_err(|error| {
+            ToolError::new(
+                "canvas_contract_error",
+                format!("structured planning snapshot was invalid: {error}"),
+            )
+        })?;
+        let domain = parsed.into_domain(now).map_err(|error| {
+            ToolError::new(
+                "canvas_contract_error",
+                format!("structured planning snapshot could not be mapped: {error}"),
+            )
+        })?;
+        let courses = domain.courses;
+        let mut assignments = domain.assignments;
+        let mut caveats = domain.warnings;
+        let mut suspicious = Vec::new();
+        for assignment in &mut assignments {
+            let hits = untrusted::scan(&assignment.title);
+            if !hits.is_empty() {
+                assignment.suspicious = true;
+                suspicious.extend(hits);
+            }
+        }
+        dedupe(&mut suspicious);
+        if !suspicious.is_empty() {
+            caveats.push(
+                "Canvas content contained instruction-like text. It was treated as data and                  was not followed."
+                    .to_string(),
+            );
+        }
+        dedupe(&mut caveats);
+        Ok(Snapshot {
+            assignments,
+            courses,
+            caveats,
+            suspicious,
+            fetched_at: now,
+            structured_contract: Some(crate::mcp::structured::CONTRACT_VERSION.to_string()),
         })
     }
 
@@ -555,7 +621,8 @@ impl Planner {
                 }),
             )
             .await
-            .map_err(ToolError::from)?;
+            .map_err(ToolError::from)?
+            .text;
         let mut detail = parse_assignment_details(&text, self.tz, now).map_err(|error| {
             ToolError::new(
                 "canvas_parse_error",
@@ -1017,7 +1084,7 @@ mod tests {
     use chrono_tz::America::Chicago;
 
     use super::*;
-    use crate::mcp::McpError;
+    use crate::mcp::{McpError, McpResponse};
     use crate::policy::resolve_horizon;
 
     const COURSES: &str = r#"Courses:
@@ -1068,10 +1135,10 @@ No online submission needed (1):
             &'a self,
             tool: &'a str,
             _args: Value,
-        ) -> Pin<Box<dyn Future<Output = Result<String, McpError>> + Send + 'a>> {
+        ) -> Pin<Box<dyn Future<Output = Result<McpResponse, McpError>> + Send + 'a>> {
             Box::pin(async move {
                 match self.responses.get(tool) {
-                    Some(Ok(text)) => Ok(text.clone()),
+                    Some(Ok(text)) => Ok(McpResponse::text(text.clone())),
                     Some(Err(error)) => Err(McpError::Tool(error.clone())),
                     None => Err(McpError::NotAllowed(tool.into())),
                 }

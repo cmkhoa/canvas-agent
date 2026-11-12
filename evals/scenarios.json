@@ -480,6 +480,51 @@
           "final_response"
         ]
       }
+    },
+    {
+      "name": "structured-contract",
+      "description": "Prefers the typed get_planning_snapshot contract over text parsing.",
+      "fixture": "structured",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What should I prioritize this week?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "plan_priorities",
+              "arguments": {
+                "days": 7
+              }
+            }
+          ]
+        },
+        {
+          "text": "The missing problem set is first [S1], then the sorting lab [S2]. Want the full ranked list?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "priority_order": [
+          9001,
+          9002,
+          9006
+        ],
+        "citation_ids": [
+          "S1",
+          "S2"
+        ],
+        "must_contain": [
+          "Deterministic priority plan",
+          "No due date in Canvas"
+        ],
+        "audit_events": [
+          "tool_call",
+          "priority_calculation",
+          "final_response"
+        ]
+      }
     }
   ]
 }

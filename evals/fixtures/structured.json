@@ -1,0 +1,89 @@
+{
+  "tools": {
+    "get_planning_snapshot": {
+      "structured": {
+        "schema_version": "1",
+        "generated_at": "2026-11-12T15:25:00Z",
+        "courses": [
+          {
+            "id": 101,
+            "code": "CS 101",
+            "name": "Intro to Computer Science",
+            "term": "Fall 2026",
+            "role": "student"
+          },
+          {
+            "id": 202,
+            "code": "BIO 200",
+            "name": "Genetics",
+            "term": "Fall 2026",
+            "role": "student"
+          }
+        ],
+        "assignments": [
+          {
+            "course_id": 202,
+            "assignment_id": 9001,
+            "title": "Problem Set 4",
+            "due_at": "2026-11-13T05:59:00Z",
+            "points_possible": 50.0,
+            "submission_types": [
+              "online_upload"
+            ],
+            "submission": {
+              "workflow_state": "unsubmitted",
+              "submitted": false,
+              "missing": true
+            }
+          },
+          {
+            "course_id": 101,
+            "assignment_id": 9002,
+            "title": "Lab 5: Sorting",
+            "due_at": "2026-11-14T05:59:00Z",
+            "points_possible": 100.0,
+            "submission_types": [
+              "online_upload"
+            ],
+            "submission": {
+              "workflow_state": "unsubmitted",
+              "submitted": false,
+              "missing": false
+            }
+          },
+          {
+            "course_id": 101,
+            "assignment_id": 9003,
+            "title": "Reading reflection",
+            "due_at": null,
+            "points_possible": null,
+            "submission_types": [
+              "online_upload"
+            ],
+            "submission": {
+              "workflow_state": "unsubmitted",
+              "submitted": false,
+              "missing": false
+            }
+          },
+          {
+            "course_id": 101,
+            "assignment_id": 9006,
+            "title": "Quiz 3",
+            "due_at": "2026-11-17T05:59:00Z",
+            "points_possible": 20.0,
+            "submission_types": [
+              "online_quiz"
+            ],
+            "submission": {
+              "workflow_state": "unsubmitted",
+              "submitted": false,
+              "missing": false
+            }
+          }
+        ],
+        "warnings": []
+      }
+    }
+  }
+}

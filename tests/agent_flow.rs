@@ -10,7 +10,7 @@ use canvas_agent::audit::AuditLog;
 use canvas_agent::clock::{Clock, FixedClock};
 use canvas_agent::llm::LlmProvider;
 use canvas_agent::llm::scripted::{ScriptStep, ScriptedLlm};
-use canvas_agent::mcp::{CanvasMcp, McpError};
+use canvas_agent::mcp::{CanvasMcp, McpError, McpResponse};
 use canvas_agent::planner::Planner;
 use canvas_agent::policy::Policy;
 use canvas_agent::session::Session;
@@ -78,10 +78,10 @@ impl CanvasMcp for Mock {
         &'a self,
         tool: &'a str,
         _args: Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, McpError>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<McpResponse, McpError>> + Send + 'a>> {
         Box::pin(async move {
             match self.responses.get(tool) {
-                Some(Ok(text)) => Ok(text.clone()),
+                Some(Ok(text)) => Ok(McpResponse::text(text.clone())),
                 Some(Err(error)) => Err(McpError::Tool(error.clone())),
                 None => Err(McpError::NotAllowed(tool.into())),
             }

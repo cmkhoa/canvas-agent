@@ -20,7 +20,7 @@ use crate::audit::AuditLog;
 use crate::clock::{Clock, FixedClock, parse_clock_override};
 use crate::llm::LlmProvider;
 use crate::llm::scripted::{ScriptStep, ScriptedLlm};
-use crate::mcp::{CanvasMcp, McpError};
+use crate::mcp::{CanvasMcp, McpError, McpResponse};
 use crate::planner::Planner;
 use crate::policy::Policy;
 use crate::session::Session;
@@ -83,6 +83,8 @@ pub struct FixtureResponse {
     pub ok: Option<String>,
     #[serde(default)]
     pub error: Option<String>,
+    #[serde(default)]
+    pub structured: Option<Value>,
 }
 
 #[derive(Debug, Clone)]
@@ -166,7 +168,7 @@ impl CanvasMcp for FixtureMcp {
         &'a self,
         tool: &'a str,
         _args: Value,
-    ) -> Pin<Box<dyn Future<Output = Result<String, McpError>> + Send + 'a>> {
+    ) -> Pin<Box<dyn Future<Output = Result<McpResponse, McpError>> + Send + 'a>> {
         Box::pin(async move {
             let response = self
                 .fixture
@@ -176,11 +178,20 @@ impl CanvasMcp for FixtureMcp {
             if let Some(error) = &response.error {
                 return Err(McpError::Tool(error.clone()));
             }
-            response
-                .ok
-                .clone()
-                .ok_or_else(|| McpError::Protocol(format!("fixture for {tool} has no ok text")))
+            if response.ok.is_none() && response.structured.is_none() {
+                return Err(McpError::Protocol(format!(
+                    "fixture for {tool} has no ok text or structured content"
+                )));
+            }
+            Ok(McpResponse {
+                text: response.ok.clone().unwrap_or_default(),
+                structured: response.structured.clone(),
+            })
         })
+    }
+
+    fn supports_structured_snapshot(&self) -> bool {
+        self.fixture.tools.contains_key("get_planning_snapshot")
     }
 }
 
