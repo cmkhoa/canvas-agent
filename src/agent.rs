@@ -90,8 +90,7 @@ impl Agent {
     pub fn set_horizon(&mut self, days: u32) -> Result<()> {
         self.session
             .set_horizon(days, self.planner.policy().max_horizon_days())?;
-        let now = self.clock.now();
-        let id = request_id(now, self.session.turn);
+        let id = request_id();
         self.audit.append(
             &id,
             self.session.turn,
@@ -112,7 +111,7 @@ impl Agent {
         let input = input.trim();
         let now = self.clock.now();
         let turn = self.session.next_turn();
-        let request = request_id(now, turn);
+        let request = request_id();
         let mut events = vec!["request".to_string()];
 
         self.audit.append(

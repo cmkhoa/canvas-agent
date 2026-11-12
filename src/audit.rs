@@ -12,6 +12,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
+use uuid::Uuid;
 
 use crate::error::{AgentError, Result};
 
@@ -112,12 +113,9 @@ pub fn input_fingerprint(input: &str) -> Value {
     })
 }
 
-/// A process-local request ID without adding a UUID dependency.
-pub fn request_id(now: DateTime<Utc>, turn: u32) -> String {
-    use std::sync::atomic::{AtomicU64, Ordering};
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-    let n = COUNTER.fetch_add(1, Ordering::Relaxed);
-    format!("req-{}-{turn}-{n}", now.timestamp_millis())
+/// A globally unique request ID, safe across process restarts and fixed clocks.
+pub fn request_id() -> String {
+    format!("req-{}", Uuid::new_v4())
 }
 
 #[cfg(test)]
@@ -153,7 +151,6 @@ mod tests {
 
     #[test]
     fn request_ids_are_unique_per_call() {
-        let now = Utc::now();
-        assert_ne!(request_id(now, 1), request_id(now, 1));
+        assert_ne!(request_id(), request_id());
     }
 }
