@@ -1,8 +1,9 @@
-//! Detection (never execution) of instruction-like text inside Canvas data.
+//! Heuristic signal (never execution) for instruction-like text inside Canvas data.
 //!
-//! canvas-mcp already fences instructor/classmate text. This layer is defense in depth:
-//! it flags suspicious content for the audit log and for a visible caveat, and never
-//! changes the tool allowlist or policy based on what the text says.
+//! This scanner is NOT the security boundary. It can miss novel attacks and can flag benign
+//! course text. Its only jobs are to add a visible caveat, add an audit label, and remind the
+//! model that Canvas text is data. The actual protection is architectural: a fixed system
+//! prompt, a code-owned read-only tool allowlist, no write tools, and code-owned policy.
 
 const PATTERNS: &[(&str, &str)] = &[
     (

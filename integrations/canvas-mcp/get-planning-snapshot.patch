@@ -1,0 +1,300 @@
+diff --git a/README.md b/README.md
+index 0a8a2bb..0f20372 100644
+--- a/README.md
++++ b/README.md
+@@ -10,7 +10,7 @@ It's built for students and ships as a single binary. Reading is the default: no
+ 
+ ## Features
+ 
+-46 read-only tools, including:
++47 read-only tools, including an additive structured `get_planning_snapshot` for agent clients:
+ 
+ | Area | Tools |
+ |---|---|
+diff --git a/src/tools/assignments.rs b/src/tools/assignments.rs
+index 01256cf..c58c354 100644
+--- a/src/tools/assignments.rs
++++ b/src/tools/assignments.rs
+@@ -92,7 +92,7 @@ fn score_text(sub: &Submission, possible: Option<f64>) -> String {
+ }
+ 
+ impl CanvasServer {
+-    async fn assignments_with_submissions(
++    pub(super) async fn assignments_with_submissions(
+         &self,
+         course_path_id: &str,
+     ) -> Result<(Vec<Assignment>, bool), CanvasError> {
+diff --git a/src/tools/mod.rs b/src/tools/mod.rs
+index 1022884..302c4ca 100644
+--- a/src/tools/mod.rs
++++ b/src/tools/mod.rs
+@@ -28,6 +28,7 @@ mod inbox;
+ mod modules;
+ mod pages;
+ mod peer_reviews;
++mod planning;
+ mod profile;
+ mod quizzes;
+ mod schema;
+@@ -112,6 +113,7 @@ impl CanvasServer {
+             + Self::files_router()
+             + Self::quizzes_router()
+             + Self::peer_reviews_router()
++            + Self::planning_router()
+             + Self::groups_router()
+             + Self::calendar_router()
+             + Self::inbox_router();
+diff --git a/src/tools/planning.rs b/src/tools/planning.rs
+new file mode 100644
+index 0000000..6c997f2
+--- /dev/null
++++ b/src/tools/planning.rs
+@@ -0,0 +1,168 @@
++//! Optional structured data contract for agent clients.
++//!
++//! Existing tools keep their human-readable text contract. This additive tool returns a
++//! schema-versioned JSON snapshot so an agent does not have to parse presentation text.
++//! It is read-only and reuses the same Canvas client and assignment fetch path.
++
++use chrono::{SecondsFormat, Utc};
++use rmcp::{handler::server::wrapper::Json, schemars, tool, tool_router};
++use serde::Serialize;
++
++use super::{CanvasServer, err};
++use crate::canvas::models::{Assignment, Course, Submission};
++
++/// Bump when a breaking field change is made. Additive fields do not require a bump.
++const SNAPSHOT_SCHEMA_VERSION: &str = "1";
++
++#[derive(Debug, Serialize, schemars::JsonSchema)]
++pub struct PlanningSnapshot {
++    /// Structured contract version understood by the agent.
++    pub schema_version: String,
++    /// RFC 3339 instant when the snapshot was produced.
++    pub generated_at: String,
++    pub courses: Vec<PlanningCourse>,
++    pub assignments: Vec<PlanningAssignment>,
++    /// Non-fatal problems: a course that could not be read, a truncated list, etc.
++    pub warnings: Vec<String>,
++}
++
++#[derive(Debug, Serialize, schemars::JsonSchema)]
++pub struct PlanningCourse {
++    pub id: u64,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub code: Option<String>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub name: Option<String>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub term: Option<String>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub role: Option<String>,
++}
++
++#[derive(Debug, Serialize, schemars::JsonSchema)]
++pub struct PlanningAssignment {
++    pub course_id: u64,
++    pub assignment_id: u64,
++    pub title: String,
++    /// RFC 3339 UTC instant, or null when Canvas has no due date.
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub due_at: Option<String>,
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub points_possible: Option<f64>,
++    pub submission_types: Vec<String>,
++    /// `assignment` or `quiz`.
++    pub kind: String,
++    pub submission: PlanningSubmission,
++}
++
++#[derive(Debug, Serialize, schemars::JsonSchema)]
++pub struct PlanningSubmission {
++    #[serde(skip_serializing_if = "Option::is_none")]
++    pub workflow_state: Option<String>,
++    pub submitted: bool,
++    pub missing: bool,
++    pub late: bool,
++    pub excused: bool,
++    pub graded: bool,
++}
++
++fn planning_submission(submission: Option<&Submission>) -> PlanningSubmission {
++    match submission {
++        Some(submission) => PlanningSubmission {
++            workflow_state: submission.workflow_state.clone(),
++            submitted: submission.submitted_at.is_some(),
++            missing: submission.missing.unwrap_or(false),
++            late: submission.late.unwrap_or(false),
++            excused: submission.excused.unwrap_or(false),
++            graded: submission.workflow_state.as_deref() == Some("graded")
++                || submission.score.is_some(),
++        },
++        None => PlanningSubmission {
++            workflow_state: None,
++            submitted: false,
++            missing: false,
++            late: false,
++            excused: false,
++            graded: false,
++        },
++    }
++}
++
++fn planning_assignment(course_id: u64, assignment: &Assignment) -> PlanningAssignment {
++    PlanningAssignment {
++        course_id,
++        assignment_id: assignment.id,
++        title: assignment.title().to_string(),
++        due_at: assignment
++            .due_at
++            .map(|due| due.to_rfc3339_opts(SecondsFormat::Secs, true)),
++        points_possible: assignment.points_possible,
++        submission_types: assignment.submission_types.clone(),
++        kind: if assignment.is_quiz_lti_assignment == Some(true) || assignment.quiz_id.is_some() {
++            "quiz".into()
++        } else {
++            "assignment".into()
++        },
++        submission: planning_submission(assignment.submission.as_ref()),
++    }
++}
++
++#[tool_router(router = planning_router, vis = "pub(super)")]
++impl CanvasServer {
++    /// A typed, read-only snapshot for agent planning: courses, assignments, due dates,
++    /// points, submission flags, and warnings. Existing text tools are unchanged.
++    #[tool(annotations(
++        title = "Planning snapshot",
++        read_only_hint = true,
++        open_world_hint = true
++    ))]
++    pub async fn get_planning_snapshot(&self) -> Result<Json<PlanningSnapshot>, String> {
++        let courses = self.courses().active_courses().await.map_err(err)?;
++        let mut warnings = Vec::new();
++        let mut planning_courses = Vec::with_capacity(courses.len());
++        for course in courses.iter() {
++            planning_courses.push(PlanningCourse {
++                id: course.id,
++                code: course.course_code.clone(),
++                name: course.name.clone(),
++                term: course.term.as_ref().and_then(|term| term.name.clone()),
++                role: {
++                    let roles = course.my_roles();
++                    (!roles.is_empty()).then(|| roles.join(", "))
++                },
++            });
++        }
++
++        let results = self
++            .fan_out(courses.as_slice(), |course: &Course| {
++                let path_id = course.id.to_string();
++                async move { self.assignments_with_submissions(&path_id).await }
++            })
++            .await;
++
++        if !results.failed.is_empty() {
++            warnings.push(results.failure_note().trim().to_string());
++        }
++        let mut assignments = Vec::new();
++        for (course, (course_assignments, truncated)) in results.ok {
++            if truncated {
++                warnings.push(format!(
++                    "{}: only the first {} assignments were included.",
++                    course.label(),
++                    course_assignments.len()
++                ));
++            }
++            for assignment in &course_assignments {
++                assignments.push(planning_assignment(course.id, assignment));
++            }
++        }
++
++        Ok(Json(PlanningSnapshot {
++            schema_version: SNAPSHOT_SCHEMA_VERSION.into(),
++            generated_at: Utc::now().to_rfc3339(),
++            courses: planning_courses,
++            assignments,
++            warnings,
++        }))
++    }
++}
+diff --git a/tests/planning.rs b/tests/planning.rs
+new file mode 100644
+index 0000000..6ac3380
+--- /dev/null
++++ b/tests/planning.rs
+@@ -0,0 +1,61 @@
++mod common;
++
++use common::{Harness, two_courses};
++use serde_json::json;
++use wiremock::{
++    Mock, ResponseTemplate,
++    matchers::{method, path},
++};
++
++#[tokio::test]
++async fn planning_snapshot_returns_structured_contract() {
++    let harness = Harness::new().await;
++    harness.active_courses(two_courses()).await;
++
++    let assignments = json!([
++        {
++            "id": 9001,
++            "name": "Problem Set 4",
++            "due_at": "2026-11-13T05:59:00Z",
++            "points_possible": 50.0,
++            "submission_types": ["online_upload"],
++            "submission": {
++                "workflow_state": "unsubmitted",
++                "missing": true,
++                "submitted_at": null
++            }
++        },
++        {
++            "id": 9002,
++            "name": "Lab 5",
++            "due_at": null,
++            "points_possible": 100,
++            "submission_types": ["online_upload"],
++            "submission": {
++                "workflow_state": "unsubmitted",
++                "submitted_at": null
++            }
++        }
++    ]);
++    for course_id in [101, 210] {
++        Mock::given(method("GET"))
++            .and(path(format!("/api/v1/courses/{course_id}/assignments")))
++            .respond_with(ResponseTemplate::new(200).set_body_json(assignments.clone()))
++            .mount(&harness.mock)
++            .await;
++    }
++
++    let result = harness.call_raw("get_planning_snapshot", json!({})).await;
++    assert_eq!(result.is_error, Some(false));
++    let structured = result
++        .structured_content
++        .expect("structured content is present");
++    assert_eq!(structured["schema_version"], "1");
++    assert_eq!(structured["courses"].as_array().unwrap().len(), 2);
++    let first = &structured["assignments"][0];
++    assert_eq!(first["assignment_id"], 9001);
++    assert_eq!(first["due_at"], "2026-11-13T05:59:00Z");
++    assert_eq!(first["points_possible"], 50.0);
++    assert_eq!(first["submission"]["missing"], true);
++    assert_eq!(structured["warnings"].as_array().unwrap().len(), 0);
++}
+diff --git a/tests/schemas.rs b/tests/schemas.rs
+index c2cc015..927f10b 100644
+--- a/tests/schemas.rs
++++ b/tests/schemas.rs
+@@ -40,7 +40,7 @@ fn problems(value: &Value, path: &str, out: &mut Vec<String>) {
+ async fn every_tool_schema_is_portable() {
+     let h = Harness::new().await;
+     let tools = h.tools().await;
+-    assert_eq!(tools.len(), 46);
++    assert_eq!(tools.len(), 47);
+     let mut found = Vec::new();
+     for tool in &tools {
+         let schema = Value::Object((*tool.input_schema).clone());

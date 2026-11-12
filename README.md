@@ -16,7 +16,7 @@ explanation. **All dates, statuses, scores, ranks, citations, refusals, and stat
 are computed by code.** Canvas free text is treated as untrusted data.
 
 This is a separate application. It does not reimplement Canvas HTTP, and it does not
-duplicate canvas-mcp's 46 read-only tools. It calls four of them through an allowlist.
+duplicate canvas-mcp's 46 read-only tools. It calls four of them through an allowlist, plus an optional structured snapshot tool when the server advertises it.
 
 > Local-first reference implementation. No deployment and no Canvas writes.
 
@@ -26,8 +26,8 @@ duplicate canvas-mcp's 46 read-only tools. It calls four of them through an allo
 |---|---|
 | `cargo fmt --all -- --check` | passing |
 | `cargo clippy --all-targets --all-features -- -D warnings` | passing |
-| Unit + mocked integration tests | 68 passing |
-| Offline evaluation suite | 12/12 scenarios passing |
+| Unit + mocked integration tests | 71 passing |
+| Offline evaluation suite | 13/13 scenarios passing |
 | `cargo deny check` (advisories, licenses, sources) | passing |
 | GitHub Actions CI | configured; remote run pending the first push |
 
@@ -132,19 +132,21 @@ canvas-agent/
 │   ├── config.rs                   # env/CLI config, secret redaction
 │   ├── error.rs / model.rs / session.rs / policy.rs
 │   ├── mcp/
-│   │   ├── mod.rs                  # rmcp stdio client + 4-tool allowlist
-│   │   └── parse.rs                # strict parsers for canvas-mcp text output
+│   │   ├── mod.rs                  # rmcp stdio client + read-only allowlist
+│   │   ├── parse.rs                # strict fallback for released canvas-mcp text
+│   │   └── structured.rs           # typed get_planning_snapshot contract (preferred)
 │   ├── planner.rs                  # fetch/merge/score/rank/render/citations
 │   ├── tools.rs                    # app tools exposed to the model
 │   ├── validation.rs               # citation/claim/canvas-required checks
-│   ├── untrusted.rs                # injection detection (never execution)
+│   ├── untrusted.rs                # injection signal (never execution, not a guarantee)
 │   └── eval/mod.rs                 # scripted-model + mocked-MCP scenario runner
 ├── evals/
-│   ├── scenarios.json              # 12 structured scenarios
-│   └── fixtures/                   # normal, missing, error, injection
+│   ├── scenarios.json              # 13 structured scenarios
+│   └── fixtures/                   # normal, missing, error, injection, structured
 ├── tests/
 │   ├── agent_flow.rs               # 9 mocked end-to-end tests
 │   └── evals.rs                    # CI gate for the eval suite
+├── integrations/canvas-mcp/        # optional structured-contract patch + docs
 ├── scripts/setup.sh / scripts/check.sh
 └── .github/workflows/ci.yml / security.yml / dependabot.yml
 ```
@@ -185,10 +187,32 @@ per-user credential isolation.
                               Canvas API
 ```
 
-Only these existing canvas-mcp tools can be reached:
+Only these canvas-mcp tools can be reached:
 `list_courses`, `get_my_submission_status`, `get_my_upcoming_assignments`,
-`get_assignment_details`. Unknown tools, write tools, and extra arguments are rejected in
-code before any MCP call.
+`get_assignment_details`, plus the optional structured `get_planning_snapshot`. Unknown tools,
+write tools, and extra arguments are rejected in code before any MCP call.
+
+### Preferred structured data path
+
+The released canvas-mcp returns human-readable text. This repo includes an additive
+[canvas-mcp patch](integrations/canvas-mcp/get-planning-snapshot.patch) that exposes
+`get_planning_snapshot`, a read-only schema-versioned JSON payload with:
+
+- explicit course IDs and assignment IDs;
+- RFC 3339 `due_at` instants (never formatted strings);
+- numeric `points_possible`;
+- boolean `submitted`/`missing`/`late`/`excused`/`graded` flags;
+- warnings for truncated lists and per-course failures.
+
+At startup the agent calls `tools/list`. If the tool is present, planning facts come from the
+structured snapshot. If not, it uses the tested text fallback. The patch applies cleanly to
+canvas-mcp 0.1.1 and its full test suite passes with the added tool; see
+[integrations/canvas-mcp/README.md](integrations/canvas-mcp/README.md). Existing text tools are
+unchanged, so other MCP clients are unaffected.
+
+The agent validates the contract version, rejects malformed dates, treats titles as untrusted,
+and fails closed on contract violations. The text parser remains a compatibility path, not the
+primary design.
 
 ### Model-owned vs code-owned
 
@@ -263,11 +287,40 @@ from Canvas/canvas-mcp or explicit CLI/env configuration.
 | Model unreachable | If Canvas evidence exists, deterministic evidence is shown; otherwise a clear failure. |
 | Citation/claim validation failure | One repair attempt, then deterministic fallback. |
 
+## Safety and privacy
+
+**Primary controls** (the actual security boundary):
+
+1. Canvas access is read-only, and only the allowlisted read-only MCP tools are reachable.
+2. This application has no write tool and no Canvas mutation code path.
+3. The system prompt and tool schema are code-owned; Canvas text cannot add tools or change policy.
+4. Structured data is preferred; text is parsed by strict, fixture-tested fallbacks.
+5. Final answers are validated for citations/claims and can degrade to deterministic output.
+
+**The injection scanner is a signal, not a guarantee.** `src/untrusted.rs` matches common
+instruction-like phrases and zero-width obfuscation. It will miss novel attacks, and benign
+course text can trigger it. Its only jobs are to add a visible security note, add an audit
+label, and remind the model that Canvas text is data. It is not what prevents instructions from
+being followed: the fixed prompt, read-only tool allowlist, lack of write tools, and code-owned
+policy do that.
+
+- **No identity inference.** Identity, enrollment, and permissions come from Canvas/canvas-mcp,
+  never from chat text. Session state is only timezone, horizon, turn count, and a compact
+  plan memory.
+- **Fail closed.** Missing dates, unparseable dates, timezone mismatches, malformed tool output,
+  malformed structured contracts, and MCP failures produce explicit caveats or refusals — not
+  invented facts.
+- **Audit.** Append-only JSONL records requests (hashed), tool calls, refusals, priority
+  calculations, validation, and final responses (hashed). Request IDs are UUIDv4, so they remain
+  unique across restarts and fixed clocks. It never logs API keys, cookies, authorization
+  headers, or full Canvas content. Set `CANVAS_AGENT_AUDIT_LOG` to a private path.
+- **No deployment.** Local stdio only; the model provider receives only curated tool results.
+
 ## Audit log
 
 Append-only JSONL, created with `0600` permissions on Unix. Events:
 
-- `request` — input SHA-256/length, timezone, horizon, effective clock, policy version.
+- `request` — UUIDv4 request ID, input SHA-256/length, timezone, horizon, effective clock, policy version.
 - `tool_call` — tool, validated args (truncated), success/error code, source IDs, injection flag.
 - `priority_calculation` — policy version, clock, horizon, ranks, score components, risk, source.
 - `validation` — issues, cited IDs, whether a repair ran and succeeded.
@@ -282,7 +335,7 @@ content, or the raw user request. Use a private `CANVAS_AGENT_AUDIT_LOG` path.
 ## Evaluations
 
 `evals/scenarios.json` uses `ScriptedLlm` (deterministic tool calls/narratives) plus fixture
-MCP text. It asserts structured outcomes, not prose quality:
+MCP text or structured content. It asserts structured outcomes, not prose quality:
 
 | Scenario | Asserts |
 |---|---|
@@ -298,6 +351,7 @@ MCP text. It asserts structured outcomes, not prose quality:
 | `citation-repair` | One repair, valid citation after |
 | `ambiguous-horizon` | Conflicting args rejected deterministically |
 | `assignment-detail` | One assignment's due date/points/status with a citation |
+| `structured-contract` | Prefers typed `get_planning_snapshot`; no text parsing |
 
 The runner prints `PASS`/`FAIL`, exits non-zero on failure, and runs with no Canvas account or
 model key. `--verbose` prints full deterministic answers.
@@ -360,9 +414,13 @@ Sources (Canvas via canvas-mcp):
 
 ## Trade-offs and limitations
 
-- **Text contract.** canvas-mcp returns human-readable text, not structured JSON. Parsing is
-  strict and fixture-tested. A future opt-in structured result in canvas-mcp would remove this
-  boundary without changing the policy layer.
+- **Text fallback remains.** The released canvas-mcp is text-only, so the tested fallback is
+  still the default until the accompanying patch is applied or merged upstream. The agent
+  prefers `get_planning_snapshot` whenever the server advertises it. The structured contract
+  covers planning facts; assignment descriptions still come through the text detail tool.
+- **Patch not upstreamed here.** `integrations/canvas-mcp/get-planning-snapshot.patch` is a
+  verified, additive patch against canvas-mcp 0.1.1. This repository does not modify the
+  upstream server checkout.
 - **MCP clock.** `get_my_upcoming_assignments` uses canvas-mcp's real `Utc::now()` for its
   query window. The injected clock controls parsing, filtering, scoring, and rendering. Fully
   reproducible date-sensitive demos use the mocked MCP in evals.
@@ -381,7 +439,7 @@ Sources (Canvas via canvas-mcp):
 ## Future path
 
 1. Add an opt-in HTTP MCP transport for a hosted canvas-mcp with per-user credential isolation.
-2. Add an opt-in structured tool result in canvas-mcp, then delete text parsing.
+2. Apply the structured snapshot contract upstream, then remove the text fallback after a release.
 3. Add live-model eval runs (separate from CI's deterministic contract evals).
 4. Add a read-only deployment profile (container, health checks, no secrets in image,
    per-user sessions) before any hosted use.
