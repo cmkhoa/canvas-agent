@@ -292,8 +292,6 @@ fn note_line(line: &str) -> Option<String> {
         Some(format!("Canvas could not read some courses: {line}"))
     } else if lower.contains("showing the first") || lower.contains("only the first") {
         Some(line.to_string())
-    } else if lower.starts_with("active enrollments only") {
-        None
     } else {
         None
     }
