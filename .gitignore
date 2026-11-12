@@ -1,0 +1,20 @@
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# Local audit logs and runtime state
+logs/
+*.jsonl
+!evals/fixtures/*.jsonl
+
+# Build artifacts and toolchain caches
+/target/
+.toolchain/
+**/*.rs.bk
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp

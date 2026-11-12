@@ -1,0 +1,24 @@
+# Deterministic priority policy. Change thresholds here, not in Rust code.
+# Every value is validated at startup. See README "Priority policy".
+
+version = "1"
+default_horizon_days = 7
+max_horizon_days = 30
+risk_soon_hours = 72
+
+[score]
+# Points are additive. The maximum is 120 + 30 + 40 = 190.
+overdue_base = 100
+overdue_per_day = 2
+overdue_max_days = 10
+due_within_24h = 90
+due_within_72h = 75
+due_within_7d = 55
+due_within_14d = 30
+due_later = 10
+# Value is linear: min(points, points_cap) / points_cap * points_max.
+points_max = 30
+points_cap = 100
+missing_status = 40
+not_submitted_status = 15
+unknown_status = 5
