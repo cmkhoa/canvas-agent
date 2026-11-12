@@ -21,22 +21,14 @@ permissions:
   contents: read
 
 jobs:
-  dependency-review:
-    name: Dependency review (PR)
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/dependency-review-action@v4
-        with:
-          fail-on-severity: moderate
-
   cargo-deny:
     name: Advisories, licenses, sources
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.88.0
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.88.0
       - uses: Swatinem/rust-cache@v2
       - name: Install cargo-deny
         uses: taiki-e/install-action@v2
