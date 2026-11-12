@@ -110,6 +110,7 @@ The model API receives only the curated application-tool results, not Canvas cre
 | `./scripts/setup.sh` | Create `.env` if absent, fetch locked dependencies, build. |
 | `cargo fmt --all -- --check` | Formatting gate. |
 | `cargo clippy --all-targets --all-features -- -D warnings` | Lint/static gate. |
+| `cargo check --all-targets --locked` | Type/static check. |
 | `cargo test --all-targets --locked` | Unit + mocked integration tests. |
 | `cargo run --quiet --bin canvas-eval -- --scenarios evals/scenarios.json` | Offline evals. |
 | `cargo deny check` | Advisories, licenses, sources. |
@@ -147,6 +148,19 @@ canvas-agent/
 ├── scripts/setup.sh / scripts/check.sh
 └── .github/workflows/ci.yml / security.yml / dependabot.yml
 ```
+
+## Why Rust, and why stdio
+
+canvas-mcp is a Rust `rmcp` server, so the clean integration is the official `rmcp` client over
+stdio: one toolchain, no protocol reimplementation, typed JSON-RPC results, and the same MCP
+version the server already targets. The alternative (a Python client with a subprocess bridge)
+would work but would duplicate protocol handling and split the build/test story. The application
+still keeps its own policy, validation, audit, and rendering layers; Rust is an integration
+choice, not a replacement for the agent design.
+
+The supported MCP transport is a **command** (`CANVAS_MCP_COMMAND`), because canvas-mcp is a
+stdio server. A URL/HTTP transport is not enabled; it is listed in the future path with
+per-user credential isolation.
 
 ## Architecture
 

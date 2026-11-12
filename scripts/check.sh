@@ -8,6 +8,9 @@ cargo fmt --all -- --check
 echo "==> cargo clippy"
 cargo clippy --all-targets --all-features -- -D warnings
 
+echo "==> cargo check (type/static)"
+cargo check --all-targets --locked
+
 echo "==> cargo test"
 cargo test --all-targets --locked
 

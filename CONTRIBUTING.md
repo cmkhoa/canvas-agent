@@ -18,6 +18,7 @@ The Rust toolchain is pinned in `rust-toolchain.toml`. Direct dependencies are p
 |---|---|
 | `cargo fmt --all` | Format |
 | `cargo clippy --all-targets --all-features -- -D warnings` | Lint |
+| `cargo check --all-targets --locked` | Type/static check |
 | `cargo test --all-targets --locked` | Unit + mocked integration tests |
 | `cargo run --quiet --bin canvas-eval -- --scenarios evals/scenarios.json` | Offline evals |
 | `./scripts/check.sh` | All gates, including `cargo deny` if installed |
@@ -44,8 +45,9 @@ Every PR and push to `main` runs:
 
 1. `cargo fmt --all -- --check`
 2. `cargo clippy --all-targets --all-features -- -D warnings`
-3. `cargo test --all-targets --locked`
-4. `cargo run --quiet --locked --bin canvas-eval -- --scenarios evals/scenarios.json`
+3. `cargo check --all-targets --locked`
+4. `cargo test --all-targets --locked`
+5. `cargo run --quiet --locked --bin canvas-eval -- --scenarios evals/scenarios.json`
 
 A separate workflow runs `cargo deny check` and dependency review. Any failure blocks merge.
 Do not weaken a gate to make a change pass; fix the code or document the exception in the PR.
