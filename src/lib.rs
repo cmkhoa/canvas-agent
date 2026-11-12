@@ -4,6 +4,7 @@ pub mod audit;
 pub mod clock;
 pub mod config;
 pub mod error;
+pub mod llm;
 pub mod mcp;
 pub mod model;
 pub mod policy;
