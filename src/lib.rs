@@ -9,5 +9,6 @@ pub mod mcp;
 pub mod model;
 pub mod planner;
 pub mod policy;
+pub mod tools;
 pub mod untrusted;
 pub mod validation;
