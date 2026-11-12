@@ -291,15 +291,6 @@ impl Agent {
                         if let Some(order) = priority_order_from(&outcome.data) {
                             priority_order = order;
                         }
-                        if tool_name == "plan_priorities" {
-                            self.audit.append(
-                                &request,
-                                turn,
-                                "priority_calculation",
-                                priority_audit(&outcome.data, now, &self.planner),
-                            )?;
-                            events.push("priority_calculation".into());
-                        }
                         self.audit.append(
                             &request,
                             turn,
@@ -313,6 +304,15 @@ impl Agent {
                             }),
                         )?;
                         events.push("tool_call".into());
+                        if tool_name == "plan_priorities" {
+                            self.audit.append(
+                                &request,
+                                turn,
+                                "priority_calculation",
+                                priority_audit(&outcome.data, now, &self.planner),
+                            )?;
+                            events.push("priority_calculation".into());
+                        }
                         messages.push(ChatMessage::tool(
                             call.id.clone(),
                             serde_json::to_string(&outcome.data).unwrap_or_else(|_| {
