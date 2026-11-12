@@ -45,6 +45,66 @@ pub fn extract_citations(text: &str) -> Vec<String> {
     out
 }
 
+/// A deliberately broad, code-owned guard: a planning question must either call a Canvas
+/// tool or be answered as unavailable. It is not an intent classifier; the model still
+/// interprets the request.
+pub fn looks_like_canvas_question(input: &str) -> bool {
+    let lower = input.to_ascii_lowercase();
+    const TERMS: &[&str] = &[
+        "assignment",
+        "due",
+        "deadline",
+        "priorit",
+        "workload",
+        "course",
+        "class",
+        "submit",
+        "finish",
+        "risk",
+        "exam",
+        "quiz",
+        "project",
+        "grade",
+        "canvas",
+        "syllabus",
+        "module",
+        "announcement",
+        "inbox",
+        "calendar",
+        "week",
+        "today",
+        "tomorrow",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+        "what do i need",
+        "what should i",
+        "my work",
+    ];
+    TERMS.iter().any(|term| lower.contains(term))
+}
+
+pub fn validate_answer_with_context(
+    text: &str,
+    sources: &[Citation],
+    tools_used: bool,
+    canvas_required: bool,
+    canvas_attempted: bool,
+) -> ValidationReport {
+    let mut report = validate_answer(text, sources, tools_used);
+    if canvas_required && !tools_used && !canvas_attempted {
+        report.issues.push(
+            "This is a Canvas planning question, but no Canvas tool was called. Call a tool or              state clearly that Canvas data is unavailable."
+                .to_string(),
+        );
+    }
+    report
+}
+
 pub fn validate_answer(text: &str, sources: &[Citation], tools_used: bool) -> ValidationReport {
     let mut issues = Vec::new();
     let cited = extract_citations(text);

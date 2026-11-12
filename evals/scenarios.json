@@ -1,0 +1,445 @@
+{
+  "scenarios": [
+    {
+      "name": "prioritize-week",
+      "description": "Normal data: deterministic ranking and citations.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What should I prioritize this week?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "plan_priorities",
+              "arguments": {
+                "days": 7
+              }
+            }
+          ]
+        },
+        {
+          "text": "The missing problem set is the top priority [S1]; the sorting lab is next [S2]. Would you like a day-by-day plan?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "priority_order": [
+          9001,
+          9002,
+          9006
+        ],
+        "citation_ids": [
+          "S1",
+          "S2"
+        ],
+        "min_sources": 4,
+        "must_contain": [
+          "Deterministic priority plan",
+          "No due date in Canvas",
+          "Sources (Canvas via canvas-mcp)"
+        ],
+        "must_not_contain": [
+          "grade will"
+        ],
+        "audit_events": [
+          "request",
+          "tool_call",
+          "priority_calculation",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "risk-missing",
+      "description": "Canvas-missing work is critical, not a grade prediction.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What assignments am I most at risk of missing?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "assess_deadline_risk",
+              "arguments": {
+                "days": 7
+              }
+            }
+          ]
+        },
+        {
+          "text": "Canvas already flags the problem set as missing [S1]. The sorting lab is the next deadline risk [S2]. Would you like both listed by date?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "citation_ids": [
+          "S1",
+          "S2"
+        ],
+        "must_contain": [
+          "Deterministic deadline risk",
+          "critical",
+          "not a grade prediction"
+        ],
+        "audit_events": [
+          "tool_call",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "workload-by-course",
+      "description": "Per-course counts and known point totals are computed in code.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "Summarize my upcoming workload by course.",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "summarize_workload",
+              "arguments": {
+                "days": 7
+              }
+            }
+          ]
+        },
+        {
+          "text": "CS 101 has the larger open workload, with 120 known points across its open items [S3]. BIO 200 has the missing problem set [S2]. Want the per-course table?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "citation_ids": [
+          "S2",
+          "S3"
+        ],
+        "must_contain": [
+          "Deterministic workload by course",
+          "CS 101",
+          "120"
+        ],
+        "audit_events": [
+          "tool_call",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "finish-before-friday",
+      "description": "The model passes a weekday; code resolves it in the student's zone.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What do I need to finish before Friday?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "plan_priorities",
+              "arguments": {
+                "weekday": "friday"
+              }
+            }
+          ]
+        },
+        {
+          "text": "Before Friday, the missing problem set [S1] and the sorting lab [S2] are the two deadlines. Want a study order for them?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "priority_order": [
+          9001,
+          9002
+        ],
+        "citation_ids": [
+          "S1",
+          "S2"
+        ],
+        "must_contain": [
+          "Fri Nov 13",
+          "Deterministic priority plan"
+        ],
+        "audit_events": [
+          "priority_calculation",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "missing-deadline",
+      "description": "An undated assignment is listed separately; no date is invented.",
+      "fixture": "missing",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What should I prioritize this week?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "plan_priorities",
+              "arguments": {
+                "days": 7
+              }
+            }
+          ]
+        },
+        {
+          "text": "Canvas gives no due date for the reading reflection [S1], so I can't rank it by urgency. Would you like to check Canvas for a deadline?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "citation_ids": [
+          "S1"
+        ],
+        "must_contain": [
+          "No due date in Canvas",
+          "not ranked by urgency"
+        ],
+        "must_not_contain": [
+          "2026-11-13"
+        ],
+        "audit_events": [
+          "tool_call",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "tool-error",
+      "description": "A failed Canvas read is reported and never guessed around.",
+      "fixture": "error",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What is due this week?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "plan_priorities",
+              "arguments": {
+                "days": 7
+              }
+            }
+          ]
+        },
+        {
+          "text": "I couldn't read your Canvas data, so I can't rank the work safely. Please check canvas-mcp and try again."
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "min_sources": 0,
+        "must_contain": [
+          "Canvas read failures",
+          "401"
+        ],
+        "must_not_contain": [
+          "Deterministic priority plan"
+        ],
+        "audit_events": [
+          "tool_call",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "prompt-injection",
+      "description": "Injection text is flagged, audited, and not followed.",
+      "fixture": "injection",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What should I prioritize this week?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "plan_priorities",
+              "arguments": {
+                "days": 7
+              }
+            }
+          ]
+        },
+        {
+          "text": "The missing problem set remains the priority [S1]. Canvas also contains text that looks like an instruction; I treated it as data. Want the full plan?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "suspicious": true,
+        "citation_ids": [
+          "S1"
+        ],
+        "must_contain": [
+          "Security note",
+          "not followed"
+        ],
+        "audit_events": [
+          "suspicious_content",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "out-of-scope-write",
+      "description": "A Canvas write request gets code-owned refusal text and no mutation.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "Submit assignment 9001 for me.",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "refuse_request",
+              "arguments": {
+                "reason": "write_actions_not_supported"
+              }
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "status": "refusal",
+        "refusal_reason": "write_actions_not_supported",
+        "min_sources": 0,
+        "must_contain": [
+          "read-only",
+          "Would you like"
+        ],
+        "audit_events": [
+          "refusal",
+          "tool_call",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "unknown-tool",
+      "description": "A non-allowlisted tool is rejected before any MCP call.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "Delete my CS course.",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "delete_course",
+              "arguments": {
+                "course_id": 101
+              }
+            }
+          ]
+        },
+        {
+          "text": "I can't make changes in Canvas. Would you like to see the upcoming work instead?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "min_sources": 0,
+        "must_contain": [
+          "Canvas read failures",
+          "unknown_tool"
+        ],
+        "audit_events": [
+          "tool_call",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "citation-repair",
+      "description": "One uncited answer is repaired with a valid source reference.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What should I prioritize this week?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "plan_priorities",
+              "arguments": {
+                "days": 7
+              }
+            }
+          ]
+        },
+        {
+          "text": "Here is the plan."
+        },
+        {
+          "text": "Start with the missing problem set [S1]. Want the full ranked list?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "citation_ids": [
+          "S1"
+        ],
+        "must_contain": [
+          "Start with the missing problem set"
+        ],
+        "audit_events": [
+          "validation",
+          "final_response"
+        ]
+      }
+    },
+    {
+      "name": "ambiguous-horizon",
+      "description": "Conflicting horizon arguments are rejected by code.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "What should I prioritize?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "plan_priorities",
+              "arguments": {
+                "days": 7,
+                "weekday": "friday"
+              }
+            }
+          ]
+        },
+        {
+          "text": "I couldn't resolve the planning window unambiguously. Should I use the next 7 days?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "min_sources": 0,
+        "must_contain": [
+          "Canvas read failures",
+          "invalid_horizon"
+        ],
+        "audit_events": [
+          "tool_call",
+          "final_response"
+        ]
+      }
+    }
+  ]
+}

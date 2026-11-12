@@ -1,0 +1,13 @@
+{
+  "tools": {
+    "list_courses": {
+      "ok": "Courses:\n- CS 101 \u2014 Intro to Computer Science (id 101) \u00b7 Fall 2026 \u00b7 you: student\n- BIO 200 \u2014 Genetics (id 202) \u00b7 Fall 2026 \u00b7 you: student\n"
+    },
+    "get_my_submission_status": {
+      "ok": "Submission status across your active courses:\n\nNot submitted yet (1):\n- CS 101 \u00b7 \"Reading reflection\" \u00b7 due no due date \u00b7 id 9003\n"
+    },
+    "get_my_upcoming_assignments": {
+      "ok": "Nothing due in the next 37 days."
+    }
+  }
+}
