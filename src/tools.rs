@@ -379,6 +379,21 @@ impl<'a> ToolExecutor<'a> {
         if matches!(tool, AppTool::GetCourseList) {
             self.ensure_courses().await?;
             let courses = self.courses.as_ref().expect("courses loaded");
+            if courses.courses.is_empty()
+                && courses
+                    .caveats
+                    .iter()
+                    .any(|c| c.contains("unavailable") || c.contains("could not be parsed"))
+            {
+                return Err(ToolError::retryable(
+                    "mcp_tool_error",
+                    courses
+                        .caveats
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "Canvas course list was unavailable".into()),
+                ));
+            }
             let before = registry.all().len();
             let report = self
                 .planner
