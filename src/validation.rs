@@ -110,7 +110,7 @@ pub fn validate_answer(text: &str, sources: &[Citation], tools_used: bool) -> Va
     let cited = extract_citations(text);
     let known: Vec<&str> = sources.iter().map(|source| source.id.as_str()).collect();
 
-    if tools_used && cited.is_empty() {
+    if tools_used && !sources.is_empty() && cited.is_empty() {
         issues.push(
             "The answer uses Canvas data but cites no sources. Cite at least one [S#] source."
                 .to_string(),
@@ -239,6 +239,12 @@ mod tests {
         assert!(report.issues.iter().any(|i| i.contains("does not exist")));
         let report = validate_answer("See [S1].", &sources(), false);
         assert!(report.issues.iter().any(|i| i.contains("no Canvas tool")));
+    }
+
+    #[test]
+    fn empty_canvas_results_do_not_require_a_citation() {
+        let report = validate_answer("Nothing is due in this window.", &[], true);
+        assert!(report.ok(), "{report:?}");
     }
 
     #[test]

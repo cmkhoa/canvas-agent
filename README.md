@@ -26,7 +26,7 @@ duplicate canvas-mcp's 46 read-only tools. It calls four of them through an allo
 |---|---|
 | `cargo fmt --check` | passing |
 | `cargo clippy --all-targets -- -D warnings` | passing |
-| Unit + mocked integration tests | 67 passing |
+| Unit + mocked integration tests | 68 passing |
 | Offline evaluation suite | 12/12 scenarios passing |
 | `cargo deny check` (advisories, licenses, sources) | passing |
 | GitHub Actions CI | configured; remote run pending the first push |
