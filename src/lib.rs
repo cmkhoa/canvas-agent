@@ -7,6 +7,7 @@ pub mod error;
 pub mod llm;
 pub mod mcp;
 pub mod model;
+pub mod planner;
 pub mod policy;
 pub mod untrusted;
 pub mod validation;

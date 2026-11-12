@@ -449,7 +449,9 @@ fn state_for(segment: &str) -> Option<WorkState> {
         "submitted" => WorkState::Submitted,
         "graded" => WorkState::Graded,
         "excused" => WorkState::Excused,
-        "no submission needed" => WorkState::NoSubmissionNeeded,
+        "no submission needed" | "no online submission needed" => WorkState::NoSubmissionNeeded,
+        "done in an external tool" => WorkState::ExternalTool,
+        "graded without a submission" => WorkState::Graded,
         _ => return None,
     })
 }
