@@ -29,7 +29,8 @@ duplicate canvas-mcp's 46 read-only tools. It calls four of them through an allo
 | Unit + mocked integration tests | 71 passing |
 | Offline evaluation suite | 13/13 scenarios passing |
 | `cargo deny check` (advisories, licenses, sources) | passing |
-| GitHub Actions CI | configured; remote run pending the first push |
+| GitHub Actions CI | green on `main` ([run](https://github.com/cmkhoa/canvas-agent/actions/runs/43257547589)) |
+| Branch protection | `main` requires the CI and dependency-security checks; admins enforced |
 
 [![CI](https://github.com/cmkhoa/canvas-agent/actions/workflows/ci.yml/badge.svg)](https://github.com/cmkhoa/canvas-agent/actions/workflows/ci.yml)
 
