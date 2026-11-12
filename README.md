@@ -209,7 +209,8 @@ At startup the agent calls `tools/list`. If the tool is present, planning facts 
 structured snapshot. If not, it uses the tested text fallback. The patch applies cleanly to
 canvas-mcp 0.1.1 and its full test suite passes with the added tool; see
 [integrations/canvas-mcp/README.md](integrations/canvas-mcp/README.md). Existing text tools are
-unchanged, so other MCP clients are unaffected.
+unchanged, so other MCP clients are unaffected. Upstream proposal:
+[cmkhoa/canvas-mcp#3](https://github.com/cmkhoa/canvas-mcp/pull/3) (CI green).
 
 The agent validates the contract version, rejects malformed dates, treats titles as untrusted,
 and fails closed on contract violations. The text parser remains a compatibility path, not the

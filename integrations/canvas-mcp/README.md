@@ -84,6 +84,9 @@ cargo build --release
 - the existing canvas-mcp test suite, including the schema-portability test, passes with the
   tool count updated from 46 to 47.
 
+Upstream proposal: [cmkhoa/canvas-mcp#3](https://github.com/cmkhoa/canvas-mcp/pull/3). The
+canvas-mcp `fmt, clippy, test` and workflow-audit checks pass on the proposal.
+
 The patch changes no existing tool signature. It adds:
 
 - `src/tools/planning.rs` (new tool and typed structs);
