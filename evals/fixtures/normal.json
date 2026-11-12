@@ -8,6 +8,9 @@
     },
     "get_my_upcoming_assignments": {
       "ok": "Due in the next 37 days:\n- Thu Nov 12, 11:59 PM CST (in 14 hours) \u00b7 BIO 200 \u00b7 \"Problem Set 4\" \u00b7 50 pts \u00b7 MISSING \u00b7 id 9001\n- Fri Nov 13, 11:59 PM CST (tomorrow) \u00b7 CS 101 \u00b7 \"Lab 5: Sorting\" \u00b7 100 pts \u00b7 not submitted \u00b7 id 9002\n- Mon Nov 16, 11:59 PM CST (in 4 days) \u00b7 CS 101 \u00b7 \"Quiz 3\" (quiz) \u00b7 20 pts \u00b7 not submitted \u00b7 id 9006\n- Wed Nov 18, 11:59 PM CST (in 6 days) \u00b7 BIO 200 \u00b7 \"Essay draft\" \u00b7 150 pts \u00b7 submitted \u00b7 id 9007\n"
+    },
+    "get_assignment_details": {
+      "ok": "\"Lab 5: Sorting\" (CS 101, assignment 9002)\nDue: Fri Nov 13, 11:59 PM CST (tomorrow)\nPoints: 100 (graded as points)\nSubmit as: online_upload\nAttempts: 1\nYour status: not submitted\nDescription:\n<untrusted source=\"assignment description: Lab 5\">\nImplement a stable sort and explain its complexity.\n</untrusted>"
     }
   }
 }

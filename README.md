@@ -27,7 +27,7 @@ duplicate canvas-mcp's 46 read-only tools. It calls four of them through an allo
 | `cargo fmt --check` | passing |
 | `cargo clippy --all-targets -- -D warnings` | passing |
 | Unit + mocked integration tests | 67 passing |
-| Offline evaluation suite | 11/11 scenarios passing |
+| Offline evaluation suite | 12/12 scenarios passing |
 | `cargo deny check` (advisories, licenses, sources) | passing |
 | GitHub Actions CI | configured; remote run pending the first push |
 
@@ -140,7 +140,7 @@ canvas-agent/
 │   ├── untrusted.rs                # injection detection (never execution)
 │   └── eval/mod.rs                 # scripted-model + mocked-MCP scenario runner
 ├── evals/
-│   ├── scenarios.json              # 11 structured scenarios
+│   ├── scenarios.json              # 12 structured scenarios
 │   └── fixtures/                   # normal, missing, error, injection
 ├── tests/
 │   ├── agent_flow.rs               # 9 mocked end-to-end tests
@@ -297,6 +297,7 @@ MCP text. It asserts structured outcomes, not prose quality:
 | `unknown-tool` | Rejected before MCP |
 | `citation-repair` | One repair, valid citation after |
 | `ambiguous-horizon` | Conflicting args rejected deterministically |
+| `assignment-detail` | One assignment's due date/points/status with a citation |
 
 The runner prints `PASS`/`FAIL`, exits non-zero on failure, and runs with no Canvas account or
 model key. `--verbose` prints full deterministic answers.

@@ -440,6 +440,46 @@
           "final_response"
         ]
       }
+    },
+    {
+      "name": "assignment-detail",
+      "description": "One assignment's due date, points, status, and description come from Canvas.",
+      "fixture": "normal",
+      "now": "2026-11-12T09:25:00-06:00",
+      "timezone": "America/Chicago",
+      "input": "When is Lab 5 due and how many points is it?",
+      "horizon_days": 7,
+      "llm": [
+        {
+          "tool_calls": [
+            {
+              "name": "get_assignment_detail",
+              "arguments": {
+                "course_identifier": "CS 101",
+                "assignment_id": 9002
+              }
+            }
+          ]
+        },
+        {
+          "text": "Lab 5 is due Friday at 11:59 PM and is worth 100 points [S1]. Want the submission details?"
+        }
+      ],
+      "expect": {
+        "status": "ok",
+        "citation_ids": [
+          "S1"
+        ],
+        "must_contain": [
+          "Assignment detail",
+          "Fri Nov 13, 2026, 11:59 PM CST",
+          "100"
+        ],
+        "audit_events": [
+          "tool_call",
+          "final_response"
+        ]
+      }
     }
   ]
 }
